@@ -66,7 +66,7 @@ Ref<Result> PDF417Reader::decode(Ref<BinaryBitmap> image, DecodeHints hints) {
                            BarcodeFormat::PDF_417));
   return r;
 #else
-  ArrayRef<Ref<Result>> results = decodeMulti(image, hints, true);
+  ArrayRef<Ref<Result>> results = decodeMulti(image, hints, false);
   if (results == NULL) {
       throw NotFoundException();
   }
@@ -221,7 +221,7 @@ int PDF417Reader::getMinCodewordWidth(ArrayRef<Ref<ResultPoint>> p) {
 
 ArrayRef<Ref<Result>> PDF417Reader::decodeMulti(
         Ref<BinaryBitmap> image, DecodeHints hints, bool multiple) {
-    Array<Ref<Result>>* results = new Array<Ref<Result>>();
+    ArrayRef<Ref<Result>> results = new Array<Ref<Result>>();
     Detector detector(image);
     Ref<PDF417DetectorResult> detectorResult = detector.detect(image, hints,
             multiple);
@@ -238,5 +238,5 @@ ArrayRef<Ref<Result>> PDF417Reader::decodeMulti(
             std::cout << "Error: " << ignored.what() << std::endl;
         }
     }
-    return ArrayRef<Ref<Result>>(results);
+    return results;
 }

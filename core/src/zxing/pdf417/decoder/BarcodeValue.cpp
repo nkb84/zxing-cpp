@@ -22,7 +22,7 @@ void BarcodeValue::setValue(int value) {
 }
 
 ArrayRef<int> BarcodeValue::getValue() {
-    Array<int>* result = new Array<int>();
+    ArrayRef<int> result = new Array<int>();
     int maxConfidence = -1;
     for (map<int, int>::iterator it = values.begin(); it != values.end();
             it++) {
@@ -34,7 +34,7 @@ ArrayRef<int> BarcodeValue::getValue() {
             result->values().push_back(it->first);
         }
     }
-    return ArrayRef<int>(result);
+    return result;
 }
 
 int BarcodeValue::getConfidence(int value) {
