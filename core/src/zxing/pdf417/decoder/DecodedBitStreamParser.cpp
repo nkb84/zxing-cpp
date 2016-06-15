@@ -20,6 +20,9 @@
 #include <zxing/FormatException.h>
 #include <zxing/pdf417/decoder/DecodedBitStreamParser.h>
 #include <zxing/common/DecoderResult.h>
+#include <zxing/common/CharacterSetECI.h>
+
+#include <string>
 
 using std::string;
 using zxing::pdf417::DecodedBitStreamParser;
@@ -27,16 +30,24 @@ using zxing::ArrayRef;
 using zxing::Ref;
 using zxing::DecoderResult;
 using zxing::String;
+using zxing::common::CharacterSetECI;
 
 const int DecodedBitStreamParser::TEXT_COMPACTION_MODE_LATCH = 900;
 const int DecodedBitStreamParser::BYTE_COMPACTION_MODE_LATCH = 901;
 const int DecodedBitStreamParser::NUMERIC_COMPACTION_MODE_LATCH = 902;
 const int DecodedBitStreamParser::BYTE_COMPACTION_MODE_LATCH_6 = 924;
+
+const int DecodedBitStreamParser::ECI_USER_DEFINED = 925;
+const int DecodedBitStreamParser::ECI_GENERAL_PURPOSE = 926;
+const int DecodedBitStreamParser::ECI_CHARSET = 927;
+
 const int DecodedBitStreamParser::BEGIN_MACRO_PDF417_CONTROL_BLOCK = 928;
 const int DecodedBitStreamParser::BEGIN_MACRO_PDF417_OPTIONAL_FIELD = 923;
 const int DecodedBitStreamParser::MACRO_PDF417_TERMINATOR = 922;
 const int DecodedBitStreamParser::MODE_SHIFT_TO_BYTE_COMPACTION_MODE = 913;
 const int DecodedBitStreamParser::MAX_NUMERIC_CODEWORDS = 15;
+
+const int DecodedBitStreamParser::NUMBER_OF_SEQUENCE_CODEWORDS = 2;
 
 const int DecodedBitStreamParser::PL = 25;
 const int DecodedBitStreamParser::LL = 27;
@@ -78,27 +89,48 @@ DecodedBitStreamParser::DecodedBitStreamParser(){}
  **/
 Ref<DecoderResult> DecodedBitStreamParser::decode(ArrayRef<int> codewords)
 {
-  Ref<String> result (new String(100));
+  Ref<String> result (new String(codewords->size() * 2));
+  char* encoding = "ENCODING_DEFAULT";
+  CharacterSetECI* charsetECI;
   // Get compaction mode
   int codeIndex = 1;
   int code = codewords[codeIndex++];
+  Ref<PDF417ResultMetadata> resultMetadata(new PDF417ResultMetadata());
   while (codeIndex < codewords[0]) {
     switch (code) {
       case TEXT_COMPACTION_MODE_LATCH:
         codeIndex = textCompaction(codewords, codeIndex, result);
         break;
       case BYTE_COMPACTION_MODE_LATCH:
+      case BYTE_COMPACTION_MODE_LATCH_6:
         codeIndex = byteCompaction(code, codewords, codeIndex, result);
+        break;
+      case MODE_SHIFT_TO_BYTE_COMPACTION_MODE:
+        result->append((char) codewords[codeIndex++]);
         break;
       case NUMERIC_COMPACTION_MODE_LATCH:
         codeIndex = numericCompaction(codewords, codeIndex, result);
         break;
-      case MODE_SHIFT_TO_BYTE_COMPACTION_MODE:
-        codeIndex = byteCompaction(code, codewords, codeIndex, result);
+      case ECI_CHARSET:
+        charsetECI =
+            CharacterSetECI::getCharacterSetECIByValue(codewords[codeIndex++]);
+        encoding = const_cast<char*>(charsetECI->name());
         break;
-      case BYTE_COMPACTION_MODE_LATCH_6:
-        codeIndex = byteCompaction(code, codewords, codeIndex, result);
+      case ECI_GENERAL_PURPOSE:
+        // Can't do anything with generic ECI; skip its 2 characters
+        codeIndex += 2;
         break;
+      case ECI_USER_DEFINED:
+        // Can't do anything with user ECI; skip its 1 character
+        codeIndex ++;
+        break;
+      case BEGIN_MACRO_PDF417_CONTROL_BLOCK:
+        codeIndex = decodeMacroBlock(codewords, codeIndex, resultMetadata);
+        break;
+      case BEGIN_MACRO_PDF417_OPTIONAL_FIELD:
+      case MACRO_PDF417_TERMINATOR:
+        // Should not see these outside a macro block
+        throw FormatException();
       default:
         // Default to text compaction. During testing numerous barcodes
         // appeared to be missing the starting mode. In these cases defaulting
@@ -113,7 +145,61 @@ Ref<DecoderResult> DecodedBitStreamParser::decode(ArrayRef<int> codewords)
       throw FormatException();
     }
   }
+
+  if (result->size() == 0) {
+    throw FormatException();
+  }
   return Ref<DecoderResult>(new DecoderResult(ArrayRef<char>(), result));
+}
+
+int DecodedBitStreamParser::decodeMacroBlock(ArrayRef<int> codewords, int codeIndex,
+                                Ref<PDF417ResultMetadata> resultMetadata){
+    if (codeIndex + NUMBER_OF_SEQUENCE_CODEWORDS > codewords[0]) {
+        // we must have at least two bytes left for the segment index
+        throw FormatException();
+    }
+    ArrayRef<int> segmentIndexArray(NUMBER_OF_SEQUENCE_CODEWORDS);
+    for (int i = 0; i < NUMBER_OF_SEQUENCE_CODEWORDS; i++, codeIndex++) {
+        segmentIndexArray[i] = codewords[codeIndex];
+    }
+    resultMetadata->setSegmentIndex(std::stoi(decodeBase900toBase10(segmentIndexArray,
+                                                                          NUMBER_OF_SEQUENCE_CODEWORDS)->getText()));
+
+    Ref<String> fileId (new String(codewords->size() * 2));
+    codeIndex = textCompaction(codewords, codeIndex, fileId);
+    resultMetadata->setFileId(fileId);
+
+    if (codewords[codeIndex] == BEGIN_MACRO_PDF417_OPTIONAL_FIELD) {
+        codeIndex++;
+        ArrayRef<int> additionalOptionCodeWords(codewords[0] - codeIndex);
+        int additionalOptionCodeWordsIndex = 0;
+
+        bool end = false;
+        while ((codeIndex < codewords[0]) && !end) {
+            int code = codewords[codeIndex++];
+            if (code < TEXT_COMPACTION_MODE_LATCH) {
+                additionalOptionCodeWords[additionalOptionCodeWordsIndex++] = code;
+            } else {
+                switch (code) {
+                case MACRO_PDF417_TERMINATOR:
+                    resultMetadata->setLastSegment(true);
+                    codeIndex++;
+                    end = true;
+                    break;
+                default:
+                    throw FormatException();
+                }
+            }
+        }
+
+        additionalOptionCodeWords->values().resize(additionalOptionCodeWordsIndex);
+        resultMetadata->setOptionalData(additionalOptionCodeWords);
+    } else if (codewords[codeIndex] == MACRO_PDF417_TERMINATOR) {
+        resultMetadata->setLastSegment(true);
+        codeIndex++;
+    }
+
+    return codeIndex;
 }
 
 /**
@@ -148,13 +234,14 @@ int DecodedBitStreamParser::textCompaction(ArrayRef<int> codewords,
           textCompactionData[index++] = TEXT_COMPACTION_MODE_LATCH;
           break;
         case BYTE_COMPACTION_MODE_LATCH:
-          codeIndex--;
-          end = true;
-          break;
+        case BYTE_COMPACTION_MODE_LATCH_6:
         case NUMERIC_COMPACTION_MODE_LATCH:
-          codeIndex--;
-          end = true;
-          break;
+        case BEGIN_MACRO_PDF417_CONTROL_BLOCK:
+        case BEGIN_MACRO_PDF417_OPTIONAL_FIELD:
+        case MACRO_PDF417_TERMINATOR:
+            codeIndex--;
+            end = true;
+            break;
         case MODE_SHIFT_TO_BYTE_COMPACTION_MODE:
           // The Mode Shift codeword 913 shall cause a temporary
           // switch from Text Compaction mode to Byte Compaction mode.
@@ -166,10 +253,6 @@ int DecodedBitStreamParser::textCompaction(ArrayRef<int> codewords,
           code = codewords[codeIndex++];
           byteCompactionData[index] = code; //Integer.toHexString(code);
           index++;
-          break;
-        case BYTE_COMPACTION_MODE_LATCH_6:
-          codeIndex--;
-          end = true;
           break;
       }
     }
@@ -381,6 +464,7 @@ int DecodedBitStreamParser::byteCompaction(int mode,
           nextCode == BEGIN_MACRO_PDF417_OPTIONAL_FIELD ||
           nextCode == MACRO_PDF417_TERMINATOR)
       {
+        codeIndex--;
         end = true;
       }
       else

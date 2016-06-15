@@ -70,6 +70,34 @@ public:
   void setRegion(int left, int top, int width, int height);
   Ref<BitArray> getRow(int y, Ref<BitArray> row);
 
+  /**
+    * @param y row to set
+    * @param row {@link BitArray} to copy from
+    */
+   void setRow(int y, Ref<BitArray> row) {
+     int offset = y * rowSize;
+     std::vector<int>& vrow = row->getBitArray();
+     std::copy(vrow.begin(), vrow.end(), bits->values().begin() + offset);
+   }
+
+  /**
+    * Modifies this {@code BitMatrix} to represent the same but rotated 180 degrees
+    */
+  void rotate180() {
+    int width = getWidth();
+    int height = getHeight();
+    Ref<BitArray> topRow(new BitArray(width));
+    Ref<BitArray> bottomRow(new BitArray(width));
+    for (int i = 0; i < (height + 1) / 2; i++) {
+        topRow = getRow(i, topRow);
+        bottomRow = getRow(height - 1 - i, bottomRow);
+        topRow->reverse();
+        bottomRow->reverse();
+        setRow(i, bottomRow);
+        setRow(height - 1 - i, topRow);
+    }
+  }
+
   int getWidth() const;
   int getHeight() const;
 

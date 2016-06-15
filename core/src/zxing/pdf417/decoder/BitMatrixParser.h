@@ -50,6 +50,13 @@ private:
   int ecLevel_; /* = -1 */
 
 public:
+  static const int BARS_IN_MODULE;
+  static const int MODULES_IN_STOP_PATTERN;
+  static const int MODULES_IN_CODEWORD;
+  static const int MAX_CODEWORDS_IN_BARCODE;
+  static const int MIN_ROWS_IN_BARCODE;
+  static const int MAX_ROWS_IN_BARCODE;
+  static const int NUMBER_OF_CODEWORDS;
   static const int SYMBOL_TABLE[];
   static const int SYMBOL_TABLE_LENGTH;
   static const int CODEWORD_TABLE[];

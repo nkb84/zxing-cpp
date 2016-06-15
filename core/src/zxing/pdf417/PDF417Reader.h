@@ -25,6 +25,9 @@
 #include <zxing/pdf417/decoder/Decoder.h>
 #include <zxing/DecodeHints.h>
 
+#include <zxing/pdf417/decoder/BitMatrixParser.h>
+using zxing::pdf417::decoder::BitMatrixParser;
+
 namespace zxing {
 namespace pdf417 {
 
@@ -38,8 +41,14 @@ class PDF417Reader : public Reader {
   static int findPatternStart(int x, int y, Ref<BitMatrix> image);
   static int findPatternEnd(int x, int y, Ref<BitMatrix> image);
 
+  static int getMaxWidth(Ref<ResultPoint> p1, Ref<ResultPoint> p2);
+  static int getMinWidth(Ref<ResultPoint> p1, Ref<ResultPoint> p2);
+  static int getMaxCodewordWidth(ArrayRef<Ref<ResultPoint>> p);
+  static int getMinCodewordWidth(ArrayRef<Ref<ResultPoint>> p);
+
  public:
   Ref<Result> decode(Ref<BinaryBitmap> image, DecodeHints hints);
+  ArrayRef<Ref<Result>> decodeMulti(Ref<BinaryBitmap> image, DecodeHints hints, bool multiple);
   void reset();
 };
 

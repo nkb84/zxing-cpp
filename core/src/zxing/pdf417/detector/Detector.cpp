@@ -74,6 +74,14 @@ const int Detector::STOP_PATTERN_LENGTH = sizeof(STOP_PATTERN) / sizeof(int);
 const int Detector::STOP_PATTERN_REVERSE[] = {1, 2, 1, 1, 1, 3, 1, 1, 7};
 const int Detector::STOP_PATTERN_REVERSE_LENGTH = sizeof(STOP_PATTERN_REVERSE) / sizeof(int);
 
+const int Detector::ROW_STEP = 5;
+const int Detector::BARCODE_MIN_HEIGHT = 10;
+const int Detector::MAX_PIXEL_DRIFT = 3;
+const int Detector::MAX_PATTERN_DRIFT = 5;
+const int Detector::SKIPPED_ROW_COUNT_MAX = 25;
+const int Detector::INDEXES_START_PATTERN[] = {0, 4, 1, 5};
+const int Detector::INDEXES_STOP_PATTERN[] = {6, 2, 7, 3};
+
 Detector::Detector(Ref<BinaryBitmap> image) : image_(image) {}
 
 Ref<DetectorResult> Detector::detect() {
@@ -662,4 +670,159 @@ Ref<BitMatrix> Detector::sampleLines(ArrayRef< Ref<ResultPoint> > const& vertice
 
 
   return linesMatrix;
+}
+
+ArrayRef<Ref<ResultPoint> > Detector::findVertices(Ref<BitMatrix> matrix,
+        int startRow, int startColumn) {
+    int height = matrix->getHeight();
+    int width = matrix->getWidth();
+    ArrayRef<Ref<ResultPoint> > result(8);
+    copyToResult(result,
+            findRowsWithPattern(matrix, height, width, startRow, startColumn,
+                    START_PATTERN, 8), INDEXES_START_PATTERN);
+    if (result[4] != NULL) {
+        startColumn = (int) result[4]->getX();
+        startRow = (int) result[4]->getY();
+    }
+    copyToResult(result,
+            findRowsWithPattern(matrix, height, width, startRow, startColumn,
+                    STOP_PATTERN, 8), INDEXES_STOP_PATTERN);
+    return result;
+}
+
+void Detector::copyToResult(ArrayRef<Ref<ResultPoint> > result,
+        ArrayRef<Ref<ResultPoint> > tmpResult,
+        const int destinationIndexes[4]) {
+    for (int i = 0; i < 4; i++) {
+        result[destinationIndexes[i]] = tmpResult[i];
+    }
+}
+
+ArrayRef<Ref<ResultPoint> > Detector::findRowsWithPattern(
+        Ref<BitMatrix> matrix, int height, int width, int startRow,
+        int startColumn, const int pattern[], int patternSize) {
+    ArrayRef<Ref<ResultPoint> > result(4);
+    boolean found = false;
+    ArrayRef<int> counters(patternSize);
+    for (; startRow < height; startRow += ROW_STEP) {
+        ArrayRef<int> loc = findGuardPattern(matrix, startColumn, startRow,
+                width, false, pattern, patternSize, counters);
+        if (loc != NULL) {
+            while (startRow > 0) {
+                ArrayRef<int> previousRowLoc = findGuardPattern(matrix,
+                        startColumn, --startRow, width, false, pattern, patternSize,
+                        counters);
+                if (previousRowLoc != NULL) {
+                    loc = previousRowLoc;
+                } else {
+                    startRow++;
+                    break;
+                }
+            }
+            result[0] = new ResultPoint(loc[0], startRow);
+            result[1] = new ResultPoint(loc[1], startRow);
+            found = true;
+            break;
+        }
+    }
+    int stopRow = startRow + 1;
+    // Last row of the current symbol that contains pattern
+    if (found) {
+        int skippedRowCount = 0;
+        int pLoc[] = { (int) result[0]->getX(), (int) result[1]->getX() };
+        ArrayRef<int> previousRowLoc(pLoc, 2);
+        for (; stopRow < height; stopRow++) {
+            ArrayRef<int> loc = findGuardPattern(matrix, previousRowLoc[0],
+                    stopRow, width, false, pattern, patternSize, counters);
+            // a found pattern is only considered to belong to the same barcode if the start and end positions
+            // don't differ too much. Pattern drift should be not bigger than two for consecutive rows. With
+            // a higher number of skipped rows drift could be larger. To keep it simple for now, we allow a slightly
+            // larger drift and don't check for skipped rows.
+            if (loc != NULL
+                    && abs(previousRowLoc[0] - loc[0]) < MAX_PATTERN_DRIFT
+                    && abs(previousRowLoc[1] - loc[1]) < MAX_PATTERN_DRIFT) {
+                previousRowLoc = loc;
+                skippedRowCount = 0;
+            } else {
+                if (skippedRowCount > SKIPPED_ROW_COUNT_MAX) {
+                    break;
+                } else {
+                    skippedRowCount++;
+                }
+            }
+        }
+        stopRow -= skippedRowCount + 1;
+        result[2] = new ResultPoint(previousRowLoc[0], stopRow);
+        result[3] = new ResultPoint(previousRowLoc[1], stopRow);
+    }
+    if (stopRow - startRow < BARCODE_MIN_HEIGHT) {
+        for (int i = 0; i < result->size(); i++) {
+            result[i] = NULL;
+        }
+    }
+    return result;
+}
+
+ArrayRef<ArrayRef<Ref<ResultPoint> > > Detector::detect(bool multiple,
+        Ref<BitMatrix> bitMatrix) {
+    ArrayRef<ArrayRef<Ref<ResultPoint> > > barcodeCoordinates = new Array<ArrayRef<Ref<ResultPoint> > >();
+    int row = 0;
+    int column = 0;
+    boolean foundBarcodeInRow = false;
+    while (row < bitMatrix->getHeight()) {
+        ArrayRef<Ref<ResultPoint>> vertices = findVertices(bitMatrix, row,
+                column);
+
+        if (vertices[0] == NULL && vertices[3] == NULL) {
+            if (!foundBarcodeInRow) {
+                // we didn't find any barcode so that's the end of searching
+                break;
+            }
+            // we didn't find a barcode starting at the given column and row. Try again from the first column and slightly
+            // below the lowest barcode we found so far.
+            foundBarcodeInRow = false;
+            column = 0;
+            for (ArrayRef<Ref<ResultPoint>> barcodeCoordinate : barcodeCoordinates->values()) {
+                if (barcodeCoordinate[1] != NULL) {
+                    row = (int) std::max(row,
+                            (int) barcodeCoordinate[1]->getY());
+                }
+                if (barcodeCoordinate[3] != NULL) {
+                    row = std::max(row, (int) barcodeCoordinate[3]->getY());
+                }
+            }
+            row += ROW_STEP;
+            continue;
+        }
+        foundBarcodeInRow = true;
+        barcodeCoordinates->values().push_back(vertices);
+        if (!multiple) {
+            break;
+        }
+        // if we didn't find a right row indicator column, then continue the search for the next barcode after the
+        // start pattern of the barcode just found.
+        if (vertices[2] != NULL) {
+            column = (int) vertices[2]->getX();
+            row = (int) vertices[2]->getY();
+        } else {
+            column = (int) vertices[4]->getX();
+            row = (int) vertices[4]->getY();
+        }
+    }
+    return barcodeCoordinates;
+}
+
+Ref<PDF417DetectorResult> Detector::detect(Ref<BinaryBitmap> image,
+        const DecodeHints& hints, bool multiple) {
+    (void) (hints);
+    // Fetch the 1 bit matrix once up front.
+    Ref<BitMatrix> matrix = image_->getBlackMatrix();
+    ArrayRef<ArrayRef<Ref<ResultPoint> > > barcodeCoordinates = detect(multiple,
+            matrix);
+    if (barcodeCoordinates->values().empty()) {
+        matrix->rotate180();
+        barcodeCoordinates = detect(multiple, matrix);
+    }
+    return Ref<PDF417DetectorResult>(
+            new PDF417DetectorResult(matrix, barcodeCoordinates));
 }

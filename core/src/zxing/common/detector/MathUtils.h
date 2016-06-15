@@ -18,6 +18,7 @@
  */
 
 #include <cmath>
+#include <zxing/common/Array.h>
 
 namespace zxing {
 namespace common {
@@ -47,6 +48,18 @@ class MathUtils {
     int xDiff = aX - bX;
     int yDiff = aY - bY;
     return sqrt(float(xDiff * xDiff + yDiff * yDiff));
+  }
+
+  /**
+   * @param array values to sum
+   * @return sum of values in array
+   */
+  static int sum(ArrayRef<int> array) {
+    int count = 0;
+    for (int a : array->values()) {
+      count += a;
+    }
+    return count;
   }
 };
 

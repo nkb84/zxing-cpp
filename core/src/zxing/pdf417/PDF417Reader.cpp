@@ -17,12 +17,16 @@
 
 #include <zxing/pdf417/PDF417Reader.h>
 #include <zxing/pdf417/detector/Detector.h>
+#include <zxing/pdf417/decoder/PDF417ScanningDecoder.h>
+
+#include <climits>
 
 using zxing::Ref;
 using zxing::Result;
 using zxing::BitMatrix;
 using zxing::pdf417::PDF417Reader;
 using zxing::pdf417::detector::Detector;
+using zxing::pdf417::detector::PDF417DetectorResult;
 
 // VC++
 using zxing::ArrayRef;
@@ -30,6 +34,7 @@ using zxing::BinaryBitmap;
 using zxing::DecodeHints;
 
 Ref<Result> PDF417Reader::decode(Ref<BinaryBitmap> image, DecodeHints hints) {
+#if 0
   Ref<DecoderResult> decoderResult;
   /* 2012-05-30 hfn C++ DecodeHintType does not yet know a type "PURE_BARCODE", */
   /* therefore skip this for now, todo: may be add this type later */
@@ -60,6 +65,13 @@ Ref<Result> PDF417Reader::decode(Ref<BinaryBitmap> image, DecodeHints hints) {
   Ref<Result> r(new Result(decoderResult->getText(), decoderResult->getRawBytes(), points,
                            BarcodeFormat::PDF_417));
   return r;
+#else
+  ArrayRef<Ref<Result>> results = decodeMulti(image, hints, true);
+  if (results == NULL) {
+      throw NotFoundException();
+  }
+  return results[0];
+#endif
 }
 
 void PDF417Reader::reset() {
@@ -167,4 +179,64 @@ int PDF417Reader::findPatternEnd(int x, int y, Ref<BitMatrix> image) {
     throw NotFoundException("PDF417Reader::findPatternEnd: no pattern end found!");
   }
   return end;
+}
+
+int PDF417Reader::getMaxWidth(Ref<ResultPoint> p1, Ref<ResultPoint> p2) {
+    if (p1 == NULL || p2 == NULL) {
+      return 0;
+    }
+    return (int) (abs(p1->getX() - p2->getX()));
+}
+
+int PDF417Reader::getMinWidth(Ref<ResultPoint> p1, Ref<ResultPoint> p2) {
+    if (p1 == NULL || p2 == NULL) {
+      return INT_MAX;
+    }
+    return (int) (abs(p1->getX() - p2->getX()));
+}
+
+int PDF417Reader::getMaxCodewordWidth(ArrayRef<Ref<ResultPoint>> p) {
+    return std::max(
+            std::max(getMaxWidth(p[0], p[4]),
+                    getMaxWidth(p[6], p[2])
+                            * BitMatrixParser::MODULES_IN_CODEWORD
+                            / BitMatrixParser::MODULES_IN_STOP_PATTERN),
+            std::max(getMaxWidth(p[1], p[5]),
+                    getMaxWidth(p[7], p[3])
+                            * BitMatrixParser::MODULES_IN_CODEWORD
+                            / BitMatrixParser::MODULES_IN_STOP_PATTERN));
+}
+
+int PDF417Reader::getMinCodewordWidth(ArrayRef<Ref<ResultPoint>> p) {
+    return std::min(
+            std::min(getMinWidth(p[0], p[4]),
+                    getMinWidth(p[6], p[2])
+                            * BitMatrixParser::MODULES_IN_CODEWORD
+                            / BitMatrixParser::MODULES_IN_STOP_PATTERN),
+            std::min(getMinWidth(p[1], p[5]),
+                    getMinWidth(p[7], p[3])
+                            * BitMatrixParser::MODULES_IN_CODEWORD
+                            / BitMatrixParser::MODULES_IN_STOP_PATTERN));
+}
+
+ArrayRef<Ref<Result>> PDF417Reader::decodeMulti(
+        Ref<BinaryBitmap> image, DecodeHints hints, bool multiple) {
+    Array<Ref<Result>>* results = new Array<Ref<Result>>();
+    Detector detector(image);
+    Ref<PDF417DetectorResult> detectorResult = detector.detect(image, hints,
+            multiple);
+    for (ArrayRef<Ref<ResultPoint>> points : detectorResult->getPoints()->values()) {
+        try {
+        Ref<DecoderResult> decoderResult = PDF417ScanningDecoder::decode(
+                detectorResult->getBits(), points[4], points[5], points[6],
+                points[7], getMinCodewordWidth(points),
+                getMaxCodewordWidth(points));
+        Ref<Result> result(new Result(decoderResult->getText(),
+                decoderResult->getRawBytes(), points, BarcodeFormat::PDF_417));
+        results->values().push_back(result);
+        } catch (Exception ignored) {
+            std::cout << "Error: " << ignored.what() << std::endl;
+        }
+    }
+    return ArrayRef<Ref<Result>>(results);
 }

@@ -33,10 +33,21 @@ using zxing::ArrayRef;
 using zxing::Ref;
 using zxing::BitMatrix;
 
+namespace zxing {
+namespace pdf417 {
+namespace decoder {
+
 const int BitMatrixParser::MAX_ROWS = 90;
 // Maximum Codewords (Data + Error)
 const int BitMatrixParser::MAX_CW_CAPACITY = 929;
 const int BitMatrixParser::MODULES_IN_SYMBOL = 17;
+const int BitMatrixParser::BARS_IN_MODULE = 8;
+const int BitMatrixParser::MODULES_IN_CODEWORD = 17;
+const int BitMatrixParser::MODULES_IN_STOP_PATTERN = 18;
+const int BitMatrixParser::MAX_CODEWORDS_IN_BARCODE = 928;
+const int BitMatrixParser::NUMBER_OF_CODEWORDS = 929;
+const int BitMatrixParser::MIN_ROWS_IN_BARCODE = 3;
+const int BitMatrixParser::MAX_ROWS_IN_BARCODE = 90;
 
 BitMatrixParser::BitMatrixParser(Ref<BitMatrix> bitMatrix)
   : bitMatrix_(bitMatrix)
@@ -995,3 +1006,7 @@ const int BitMatrixParser::CODEWORD_TABLE[] =
 
 const int BitMatrixParser::SYMBOL_TABLE_LENGTH =
     sizeof(BitMatrixParser::SYMBOL_TABLE) / sizeof(int);
+
+}
+}
+}

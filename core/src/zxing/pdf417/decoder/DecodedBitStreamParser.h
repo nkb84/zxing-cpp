@@ -22,6 +22,7 @@
 #include <zxing/common/Array.h>
 #include <zxing/common/Str.h>
 #include <zxing/common/DecoderResult.h>
+#include <zxing/pdf417/PDF417ResultMetadata.h>
 
 namespace zxing {
 namespace pdf417 {
@@ -43,11 +44,18 @@ class DecodedBitStreamParser {
   static const int BYTE_COMPACTION_MODE_LATCH;
   static const int NUMERIC_COMPACTION_MODE_LATCH;
   static const int BYTE_COMPACTION_MODE_LATCH_6;
+
+  static const int ECI_USER_DEFINED;
+  static const int ECI_GENERAL_PURPOSE;
+  static const int ECI_CHARSET;
+
   static const int BEGIN_MACRO_PDF417_CONTROL_BLOCK;
   static const int BEGIN_MACRO_PDF417_OPTIONAL_FIELD;
   static const int MACRO_PDF417_TERMINATOR;
   static const int MODE_SHIFT_TO_BYTE_COMPACTION_MODE;
   static const int MAX_NUMERIC_CODEWORDS;
+
+  static const int NUMBER_OF_SEQUENCE_CODEWORDS;
 
   static const int PL;
   static const int LL;
@@ -72,6 +80,9 @@ class DecodedBitStreamParser {
   static int byteCompaction(int mode, ArrayRef<int> codewords, int codeIndex, Ref<String> result);
   static int numericCompaction(ArrayRef<int> codewords, int codeIndex, Ref<String> result);
   static Ref<String> decodeBase900toBase10(ArrayRef<int> codewords, int count);
+
+  static int decodeMacroBlock(ArrayRef<int> codewords, int codeIndex,
+                              Ref<PDF417ResultMetadata> resultMetadata);
 
  public:
   DecodedBitStreamParser();
