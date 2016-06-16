@@ -43,6 +43,7 @@ class WhiteRectangleDetector : public Counted {
     int downInit_;
     int upInit_;
 
+    void Init(Ref<BitMatrix> image, int initSize, int x, int y);
   public:
     WhiteRectangleDetector(Ref<BitMatrix> image);
     WhiteRectangleDetector(Ref<BitMatrix> image, int initSize, int x, int y);

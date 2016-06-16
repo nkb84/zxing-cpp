@@ -33,33 +33,28 @@ using zxing::common::detector::MathUtils;
 // VC++
 using zxing::BitMatrix;
 
-int WhiteRectangleDetector::INIT_SIZE = 30;
+int WhiteRectangleDetector::INIT_SIZE = 10;
 int WhiteRectangleDetector::CORR = 1;
 
-WhiteRectangleDetector::WhiteRectangleDetector(Ref<BitMatrix> image) : image_(image) {
-  width_ = image->getWidth();
-  height_ = image->getHeight();
-  
-  leftInit_ = (width_ - INIT_SIZE) >> 1;
-  rightInit_ = (width_ + INIT_SIZE) >> 1;
-  upInit_ = (height_ - INIT_SIZE) >> 1;
-  downInit_ = (height_ + INIT_SIZE) >> 1;
-  
-  if (upInit_ < 0 || leftInit_ < 0 || downInit_ >= height_ || rightInit_ >= width_) {
-    throw NotFoundException("Invalid dimensions WhiteRectangleDetector");
-}
+WhiteRectangleDetector::WhiteRectangleDetector(Ref<BitMatrix> image) {
+  Init(image, INIT_SIZE, image->getWidth()/2, image->getHeight()/2);
 }
 
-WhiteRectangleDetector::WhiteRectangleDetector(Ref<BitMatrix> image, int initSize, int x, int y) : image_(image) {
-  width_ = image->getWidth();
-  height_ = image->getHeight();
-  
+WhiteRectangleDetector::WhiteRectangleDetector(Ref<BitMatrix> image, int initSize, int x, int y) {
+  Init(image, initSize, x, y);
+}
+
+void WhiteRectangleDetector::Init(Ref<BitMatrix> image, int initSize, int x, int y) {
+  image_ = image;
+  width_ = image_->getWidth();
+  height_ = image_->getHeight();
+
   int halfsize = initSize >> 1;
   leftInit_ = x - halfsize;
   rightInit_ = x + halfsize;
   upInit_ = y - halfsize;
   downInit_ = y + halfsize;
-  
+
   if (upInit_ < 0 || leftInit_ < 0 || downInit_ >= height_ || rightInit_ >= width_) {
     throw NotFoundException("Invalid dimensions WhiteRectangleDetector");
   }
@@ -89,6 +84,11 @@ std::vector<Ref<ResultPoint> > WhiteRectangleDetector::detect() {
   bool aBlackPointFoundOnBorder = true;
   bool atLeastOneBlackPointFoundOnBorder = false;
 
+  bool atLeastOneBlackPointFoundOnRight = false;
+  bool atLeastOneBlackPointFoundOnBottom = false;
+  bool atLeastOneBlackPointFoundOnLeft = false;
+  bool atLeastOneBlackPointFoundOnTop = false;
+
   while (aBlackPointFoundOnBorder) {
     aBlackPointFoundOnBorder = false;
 
@@ -96,11 +96,14 @@ std::vector<Ref<ResultPoint> > WhiteRectangleDetector::detect() {
     // .   |
     // .....
     bool rightBorderNotWhite = true;
-    while (rightBorderNotWhite && right < width_) {
+    while ((rightBorderNotWhite || !atLeastOneBlackPointFoundOnRight) && right < width_) {
       rightBorderNotWhite = containsBlackPoint(up, down, right, false);
       if (rightBorderNotWhite) {
         right++;
         aBlackPointFoundOnBorder = true;
+        atLeastOneBlackPointFoundOnRight = true;
+      } else if (!atLeastOneBlackPointFoundOnRight) {
+        right++;
       }
     }
 
@@ -113,11 +116,14 @@ std::vector<Ref<ResultPoint> > WhiteRectangleDetector::detect() {
     // .   .
     // .___.
     bool bottomBorderNotWhite = true;
-    while (bottomBorderNotWhite && down < height_) {
+    while ((bottomBorderNotWhite || !atLeastOneBlackPointFoundOnBottom) && down < height_) {
       bottomBorderNotWhite = containsBlackPoint(left, right, down, true);
       if (bottomBorderNotWhite) {
         down++;
         aBlackPointFoundOnBorder = true;
+        atLeastOneBlackPointFoundOnBottom = true;
+      } else if (!atLeastOneBlackPointFoundOnBottom) {
+        down++;
       }
     }
 
@@ -130,11 +136,14 @@ std::vector<Ref<ResultPoint> > WhiteRectangleDetector::detect() {
     // |   .
     // .....
     bool leftBorderNotWhite = true;
-    while (leftBorderNotWhite && left >= 0) {
+    while ((leftBorderNotWhite || !atLeastOneBlackPointFoundOnLeft) && left >= 0) {
       leftBorderNotWhite = containsBlackPoint(up, down, left, false);
       if (leftBorderNotWhite) {
         left--;
         aBlackPointFoundOnBorder = true;
+        atLeastOneBlackPointFoundOnLeft = true;
+      } else if (!atLeastOneBlackPointFoundOnLeft) {
+        left--;
       }
     }
 
@@ -147,11 +156,14 @@ std::vector<Ref<ResultPoint> > WhiteRectangleDetector::detect() {
     // .   .
     // .....
     bool topBorderNotWhite = true;
-    while (topBorderNotWhite && up >= 0) {
+    while ((topBorderNotWhite || !atLeastOneBlackPointFoundOnTop) && up >= 0) {
       topBorderNotWhite = containsBlackPoint(left, right, up, true);
       if (topBorderNotWhite) {
         up--;
         aBlackPointFoundOnBorder = true;
+        atLeastOneBlackPointFoundOnTop = true;
+      } else if (!atLeastOneBlackPointFoundOnTop) {
+        up--;
       }
     }
 
