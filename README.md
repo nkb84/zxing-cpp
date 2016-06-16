@@ -4,16 +4,11 @@
 
 At some point a complete C++ port/rewrite was created and maintained in the official [ZXing](https://github.com/zxing/zxing) repo. However, at the time of writing the C++ port is no longer maintained and has been removed from the official ZXing repo.
 
-This project was forked from the [last ZXing commit](https://github.com/zxing/zxing/commit/00f6340) to contain the C++ project, with the following exceptions
+This project was forked from the [zxing-cpp](https://github.com/glassechidna/zxing-cpp) to contain the C++ project, with try to keep zxing-cpp up-to-date with zxing-java version. Current progress:
+  1. Migrated PDF417
+  2. Migrated DataMatrix
+  ... To be continue
 
- * scons (Python) build system has been deleted.
- * Deleted black box tests, because they refer to a large test data in ZXing repo.
- * Added appropriate copyright/licensing details (based on those in the ZXing repo).
- * Updated README.md
-
-Removal of build systems was done to minimise maintenance burden.
-
-If tests and XCode projects (other than those produced automatically be CMake) are desired, then another repo should be created and this repo referenced as a submodule. 
 
 # Building using CMake
 
