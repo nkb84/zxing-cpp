@@ -46,6 +46,11 @@ const char DecodedBitStreamParser::TEXT_BASIC_SET_CHARS[] = {
     'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'
 };
   
+const char DecodedBitStreamParser::TEXT_SHIFT2_SET_CHARS[] = {
+    '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.',
+    '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_'
+};
+
 const char DecodedBitStreamParser::TEXT_SHIFT3_SET_CHARS[] = {
     '\'', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
     'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '{', '|', '}', '~', (char) 127
@@ -55,7 +60,7 @@ Ref<DecoderResult> DecodedBitStreamParser::decode(ArrayRef<char> bytes) {
   Ref<BitSource> bits(new BitSource(bytes));
   ostringstream result;
   ostringstream resultTrailer;
-  vector<char> byteSegments;
+  ArrayRef<ArrayRef<char>> byteSegments = new Array<ArrayRef<char>>();
   int mode = ASCII_ENCODE;
   do {
     if (mode == ASCII_ENCODE) {
@@ -89,6 +94,10 @@ Ref<DecoderResult> DecodedBitStreamParser::decode(ArrayRef<char> bytes) {
   }
   ArrayRef<char> rawBytes(bytes);
   Ref<String> text(new String(result.str()));
+  if (byteSegments->size() > 0) {
+      std::string ecLevel;
+      return Ref<DecoderResult>(new DecoderResult(rawBytes, text, byteSegments, ecLevel));
+  }
   return Ref<DecoderResult>(new DecoderResult(rawBytes, text));
 }
 
@@ -170,19 +179,24 @@ void DecodedBitStreamParser::decodeC40Segment(Ref<BitSource> bits, ostringstream
 
     parseTwoBytes(firstByte, bits->readBits(8), cValues);
 
+    int c40setLength = sizeof(C40_BASIC_SET_CHARS)/sizeof(char);
+    int c40ShiftSetLength = sizeof(C40_SHIFT2_SET_CHARS)/sizeof(char);
     for (int i = 0; i < 3; i++) {
       int cValue = cValues[i];
       switch (shift) {
         case 0:
           if (cValue < 3) {
             shift = cValue + 1;
-          } else {
+          } else if (cValue < c40setLength) {
+            char c40char = C40_BASIC_SET_CHARS[cValue];
             if (upperShift) {
-              result << (char) (C40_BASIC_SET_CHARS[cValue] + 128);
+              result << (char) (c40char + 128);
               upperShift = false;
             } else {
-              result << C40_BASIC_SET_CHARS[cValue];
+              result << c40char;
             }
+          } else {
+              throw FormatException();
           }
           break;
         case 1:
@@ -195,12 +209,13 @@ void DecodedBitStreamParser::decodeC40Segment(Ref<BitSource> bits, ostringstream
           shift = 0;
           break;
         case 2:
-          if (cValue < 27) {
+          if (cValue < c40ShiftSetLength) {
+            char c40char = C40_SHIFT2_SET_CHARS[cValue];
             if (upperShift) {
-              result << (char) (C40_SHIFT2_SET_CHARS[cValue] + 128);
+              result << (char) (c40char + 128);
               upperShift = false;
             } else {
-              result << C40_SHIFT2_SET_CHARS[cValue];
+              result << c40char;
             }
           } else if (cValue == 27) {  // FNC1
             result << ((char) 29); // translate as ASCII 29
@@ -247,19 +262,25 @@ void DecodedBitStreamParser::decodeTextSegment(Ref<BitSource> bits, ostringstrea
 
     parseTwoBytes(firstByte, bits->readBits(8), cValues);
 
+    int textShiftSetLength = sizeof(TEXT_BASIC_SET_CHARS)/sizeof(char);
+    int textShift2SetLength = sizeof(TEXT_SHIFT2_SET_CHARS)/sizeof(char);
+    int textShift3SetLength = sizeof(TEXT_SHIFT3_SET_CHARS)/sizeof(char);
     for (int i = 0; i < 3; i++) {
       int cValue = cValues[i];
       switch (shift) {
         case 0:
           if (cValue < 3) {
             shift = cValue + 1;
-          } else {
+          } else if (cValue < textShiftSetLength) {
+            char textChar = TEXT_BASIC_SET_CHARS[cValue];
             if (upperShift) {
-              result << (char) (TEXT_BASIC_SET_CHARS[cValue] + 128);
+              result << (char) (textChar + 128);
               upperShift = false;
             } else {
-              result << (TEXT_BASIC_SET_CHARS[cValue]);
+              result << textChar;
             }
+          } else {
+              throw FormatException();
           }
           break;
         case 1:
@@ -273,12 +294,13 @@ void DecodedBitStreamParser::decodeTextSegment(Ref<BitSource> bits, ostringstrea
           break;
         case 2:
           // Shift 2 for Text is the same encoding as C40
-          if (cValue < 27) {
+          if (cValue < textShift2SetLength) {
+            char textChar = TEXT_SHIFT2_SET_CHARS[cValue];
             if (upperShift) {
-              result << (char) (C40_SHIFT2_SET_CHARS[cValue] + 128);
+              result << (char) (textChar + 128);
               upperShift = false;
             } else {
-              result << (C40_SHIFT2_SET_CHARS[cValue]);
+              result << textChar;
             }
           } else if (cValue == 27) {  // FNC1
             result << ((char) 29); // translate as ASCII 29
@@ -290,13 +312,18 @@ void DecodedBitStreamParser::decodeTextSegment(Ref<BitSource> bits, ostringstrea
           shift = 0;
           break;
         case 3:
-          if (upperShift) {
-            result << (char) (TEXT_SHIFT3_SET_CHARS[cValue] + 128);
-            upperShift = false;
+          if (cValue < textShift3SetLength) {
+            char textChar = TEXT_SHIFT3_SET_CHARS[cValue];
+            if (upperShift) {
+              result << (char) (textChar + 128);
+              upperShift = false;
+            } else {
+              result << textChar;
+            }
+            shift = 0;
           } else {
-            result << (TEXT_SHIFT3_SET_CHARS[cValue]);
+            throw FormatException();
           }
-          shift = 0;
           break;
         default:
           throw FormatException("decodeTextSegment: no case");
@@ -381,7 +408,7 @@ void DecodedBitStreamParser::decodeEdifactSegment(Ref<BitSource> bits, ostringst
   } while (bits->available() > 0);
 }
   
-void DecodedBitStreamParser::decodeBase256Segment(Ref<BitSource> bits, ostringstream& result, vector<char> byteSegments) {
+void DecodedBitStreamParser::decodeBase256Segment(Ref<BitSource> bits, ostringstream& result, ArrayRef<ArrayRef<char>> byteSegments) {
   // Figure out how long the Base 256 Segment is.
   int codewordPosition = 1 + bits->getByteOffset(); // position is 1-indexed
   int d1 = unrandomize255State(bits->readBits(8), codewordPosition++);
@@ -399,6 +426,7 @@ void DecodedBitStreamParser::decodeBase256Segment(Ref<BitSource> bits, ostringst
     throw FormatException("NegativeArraySizeException");
   }
 
+  ArrayRef<char> bytes(count);
   for (int i = 0; i < count; i++) {
     // Have seen this particular error in the wild, such as at
     // http://www.bcgen.com/demo/IDAutomationStreamingDataMatrix.aspx?MODE=3&D=Fred&PFMT=3&PT=F&X=0.3&O=0&LM=0.2
@@ -406,9 +434,11 @@ void DecodedBitStreamParser::decodeBase256Segment(Ref<BitSource> bits, ostringst
       throw FormatException("byteSegments");
     }
     char byte = unrandomize255State(bits->readBits(8), codewordPosition++);
-    byteSegments.push_back(byte);
+    bytes[i] = byte;
     result << byte;
   }
+
+  byteSegments->values().push_back(bytes);
 }
 }
 }

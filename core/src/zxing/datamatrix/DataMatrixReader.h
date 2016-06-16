@@ -29,9 +29,12 @@ namespace zxing {
 namespace datamatrix {
 
 class DataMatrixReader : public Reader {
+  static const ArrayRef< Ref<ResultPoint> > NO_POINTS;
 private:
   Decoder decoder_;
 
+  static Ref<BitMatrix> extractPureBits(Ref<BitMatrix> image);
+  static int moduleSize(ArrayRef<int> leftTopBlack, Ref<BitMatrix> image);
 public:
   DataMatrixReader();
   virtual Ref<Result> decode(Ref<BinaryBitmap> image, DecodeHints hints);

@@ -55,6 +55,7 @@ private:
    */
   static const char TEXT_BASIC_SET_CHARS[];
   
+  static const char TEXT_SHIFT2_SET_CHARS[];
   static const char TEXT_SHIFT3_SET_CHARS[];  
   /**
    * See ISO 16022:2006, 5.2.3 and Annex C, Table C.2
@@ -79,7 +80,7 @@ private:
   /**
    * See ISO 16022:2006, 5.2.9 and Annex B, B.2
    */
-  void decodeBase256Segment(Ref<BitSource> bits, std::ostringstream &result, std::vector<char> byteSegments);
+  void decodeBase256Segment(Ref<BitSource> bits, std::ostringstream &result, ArrayRef<ArrayRef<char>> byteSegments);
 
   void parseTwoBytes(int firstByte, int secondByte, int* result);
   /**

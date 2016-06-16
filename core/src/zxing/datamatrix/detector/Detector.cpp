@@ -247,10 +247,10 @@ Ref<DetectorResult> Detector::detect() {
   }
 
   ArrayRef< Ref<ResultPoint> > points (new Array< Ref<ResultPoint> >(4));
-  points[0].reset(topLeft);
-  points[1].reset(bottomLeft);
-  points[2].reset(correctedTopRight);
-  points[3].reset(bottomRight);
+  points[0] = topLeft;
+  points[1] = bottomLeft;
+  points[2] = correctedTopRight;
+  points[3] = bottomRight;
   Ref<DetectorResult> detectorResult(new DetectorResult(bits, points));
   return detectorResult;
 }

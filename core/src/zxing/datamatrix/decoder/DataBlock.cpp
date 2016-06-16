@@ -65,40 +65,36 @@ std::vector<Ref<DataBlock> > DataBlock::getDataBlocks(ArrayRef<char> rawCodeword
   }
 
   // All blocks have the same amount of data, except that the last n
-  // (where n may be 0) have 1 more byte. Figure out where these start.
-  int shorterBlocksTotalCodewords = result[0]->codewords_->size();
-  int longerBlocksStartAt = result.size() - 1;
-  while (longerBlocksStartAt >= 0) {
-    int numCodewords = result[longerBlocksStartAt]->codewords_->size();
-    if (numCodewords == shorterBlocksTotalCodewords) {
-      break;
-    }
-    if (numCodewords != shorterBlocksTotalCodewords + 1) {
-      throw IllegalArgumentException("Data block sizes differ by more than 1");
-    }
-    longerBlocksStartAt--;
-  }
-  longerBlocksStartAt++;
+  // (where n may be 0) have 1 less byte. Figure out where these start.
+  // TODO(bbrown): There is only one case where there is a difference for Data Matrix for size 144
+  int longerBlocksTotalCodewords = result[0]->codewords_->size();
+  //int shorterBlocksTotalCodewords = longerBlocksTotalCodewords - 1;
 
-  int shorterBlocksNumDataCodewords = shorterBlocksTotalCodewords - ecBlocks->getECCodewords();
-  // The last elements of result may be 1 element longer;
-  // first fill out as many elements as all of them have
+  int longerBlocksNumDataCodewords = longerBlocksTotalCodewords - ecBlocks->getECCodewords();
+  int shorterBlocksNumDataCodewords = longerBlocksNumDataCodewords - 1;
+  // The last elements of result may be 1 element shorter for 144 matrix
+  // first fill out as many elements as all of them have minus 1
   int rawCodewordsOffset = 0;
   for (int i = 0; i < shorterBlocksNumDataCodewords; i++) {
-    for (int j = 0; j < numResultBlocks; j++) {
-      result[j]->codewords_[i] = rawCodewords[rawCodewordsOffset++];
-    }
+   for (int j = 0; j < numResultBlocks; j++) {
+     result[j]->codewords_[i] = rawCodewords[rawCodewordsOffset++];
+   }
   }
+
   // Fill out the last data block in the longer ones
-  for (int j = longerBlocksStartAt; j < numResultBlocks; j++) {
-    result[j]->codewords_[shorterBlocksNumDataCodewords] = rawCodewords[rawCodewordsOffset++];
+  boolean specialVersion = version->getVersionNumber() == 24;
+  int numLongerBlocks = specialVersion ? 8 : numResultBlocks;
+  for (int j = 0; j < numLongerBlocks; j++) {
+    result[j]->codewords_[longerBlocksNumDataCodewords - 1] = rawCodewords[rawCodewordsOffset++];
   }
+
   // Now add in error correction blocks
   int max = result[0]->codewords_->size();
-  for (int i = shorterBlocksNumDataCodewords; i < max; i++) {
+  for (int i = longerBlocksNumDataCodewords; i < max; i++) {
     for (int j = 0; j < numResultBlocks; j++) {
-      int iOffset = j < longerBlocksStartAt ? i : i + 1;
-      result[j]->codewords_[iOffset] = rawCodewords[rawCodewordsOffset++];
+      int jOffset = specialVersion ? (j + 8) % numResultBlocks : j;
+      int iOffset = specialVersion && jOffset > 7 ? i - 1 : i;
+      result[jOffset]->codewords_[iOffset] = rawCodewords[rawCodewordsOffset++];
     }
   }
 
