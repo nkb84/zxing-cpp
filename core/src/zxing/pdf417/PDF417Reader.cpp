@@ -67,7 +67,7 @@ Ref<Result> PDF417Reader::decode(Ref<BinaryBitmap> image, DecodeHints hints) {
   return r;
 #else
   ArrayRef<Ref<Result>> results = decodeMulti(image, hints, false);
-  if (results == NULL) {
+  if (results->size() == 0) {
       throw NotFoundException();
   }
   return results[0];
