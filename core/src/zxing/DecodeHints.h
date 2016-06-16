@@ -59,6 +59,7 @@ class DecodeHints {
   // static const DecodeHintType ASSUME_CODE_39_CHECK_DIGIT = 1 << 28;
   static const DecodeHintType  ASSUME_GS1 = 1 << 27;
   // static const DecodeHintType NEED_RESULT_POINT_CALLBACK = 1 << 26;
+  static const DecodeHintType  PURE_BARCODE = 1 << 25;
   
   static const DecodeHints PRODUCT_HINT;
   static const DecodeHints ONED_HINT;
@@ -73,6 +74,8 @@ class DecodeHints {
   void clear() {hints=0;}
   void setTryHarder(bool toset);
   bool getTryHarder() const;
+
+  bool containsKey(DecodeHintType hint) const;
 
   void setResultPointCallback(Ref<ResultPointCallback> const&);
   Ref<ResultPointCallback> getResultPointCallback() const;

@@ -140,3 +140,7 @@ DecodeHints zxing::operator | (DecodeHints const& l, DecodeHints const& r) {
   }
   return result;
 }
+
+bool DecodeHints::containsKey(DecodeHintType hint) const {
+  return (hints & hint) != 0;
+}
